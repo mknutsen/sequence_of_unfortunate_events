@@ -1,5 +1,8 @@
-from time import sleep
-from typing import Optional
+import math
+from multiprocessing import Manager
+from threading import Thread
+from time import sleep, time, time_ns
+from typing import List, Optional
 
 import sys
 
@@ -32,6 +35,7 @@ start_time = datetime.now()
 
 _HORIZONTAL_OFFSET = 0
 _VERTICAL_OFFSET = 0
+shift = 0
 
 
 def set_settings() -> None:
@@ -39,7 +43,13 @@ def set_settings() -> None:
 
 
 def parse_key(event) -> Optional[int]:
+    global shift
     print(event.__dict__)
+    if event.key == pygame.K_z:
+        shift += -1
+
+    elif event.key == pygame.K_x:
+        shift += 1
     try:
         translation = {pygame.K_a: 48,
                        pygame.K_w: 49,
@@ -53,9 +63,20 @@ def parse_key(event) -> Optional[int]:
                        pygame.K_h: 57,
                        pygame.K_u: 58,
                        pygame.K_j: 59, }
-        return translation[event.key]
+        return translation[event.key] + shift * 12
     except:
         return None
+
+
+def display_sequence(sequence: List[Optional[Message]], beats_per_measure, number_bars_in_sequence, sequences_per_beat):
+    string = "".join([f"{i :<4}" for i in range(1, 1 + number_bars_in_sequence)]) + "\n"
+    for index, item in enumerate(sequence, start=1):
+        string += f"{item.note if item else '_' :<4}"
+
+        if index % beats_per_measure == 0:
+            string += "\n"
+
+    print(string)
 
 
 def main():
@@ -63,9 +84,17 @@ def main():
 
     sprites = pygame.sprite.Group()
 
+    beats_per_measure = 4
+    number_bars_in_sequence = 1
+    sequences_per_beat = 1
     BEATS_PER_MINUTE = 60
+    MICROSECONDS_PER_MINUTE = 60000000
     SECONDS_PER_MINUTE = 60
-    TIMEDELTA_PER_BEAT = BEATS_PER_MINUTE / SECONDS_PER_MINUTE
+    MICROSECONDS_PER_SECOND = MICROSECONDS_PER_MINUTE * SECONDS_PER_MINUTE
+    MICROSECONDS_PER_BEAT = MICROSECONDS_PER_MINUTE / BEATS_PER_MINUTE
+    MICROSECONDS_PER_BAR = MICROSECONDS_PER_BEAT * beats_per_measure
+    NANOSECONDS_PER_MICROSECOND = 1000
+    TIME_THRESHOLD = MICROSECONDS_PER_MINUTE / SECONDS_PER_MINUTE
 
     # port_in = open_input('USB MIDI Device')
     port_out = open_output('mio')
@@ -86,22 +115,64 @@ def main():
     # screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     # print("framerate:", framerate)
     # print("tolerance:", _TOLERANCE)
+    start_time_ns = time_ns()
+    count = 0
+    # with Manager() as manager:
+    sequence: List[Optional[Message]] = [None, ] * number_bars_in_sequence * beats_per_measure * sequences_per_beat
+
+
+    def _target():
+        current_time_ns = time_ns()
+        nanosecond_delta = current_time_ns - start_time_ns
+        microsecond_delta: int = math.floor(nanosecond_delta / NANOSECONDS_PER_MICROSECOND)
+        beat_count: int = math.ceil(microsecond_delta / MICROSECONDS_PER_BEAT)
+        sequence_index = beat_count % len(sequence)
+        while True:
+            for i in range(0, len(sequence)):
+                note = sequence[i]
+                if note:
+                    try:
+                        print(f"note {i} {note}")
+                        port_out.send(note)
+                    except Exception as e:
+                        print("failure", note)
+                        print(e)
+                sleep(1)
+            print("hey! count")
+            display_sequence(sequence=sequence, beats_per_measure=beats_per_measure,
+                             number_bars_in_sequence=number_bars_in_sequence,
+                             sequences_per_beat=sequences_per_beat)
+
+
+    playing_thread = Thread(target=_target)
+    playing_thread.daemon = True
+    playing_thread.start()
+
     while True:
+        current_time_ns = time_ns()
+        nanosecond_delta = current_time_ns - start_time_ns
+        microsecond_delta: int = math.floor(nanosecond_delta / NANOSECONDS_PER_MICROSECOND)
+        beat_count: int = math.floor(microsecond_delta / MICROSECONDS_PER_BEAT)
+        sequence_index = beat_count % len(sequence)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 note = parse_key(event)
-                if note:
-                    port_out.send(Message(type='note_on', channel=0, note=note, time=0))
-                    # sleep(1)
-                    # port_out.send(Message(type='note_off', channel=0, note=note, time=0))
+                try:
+                    sequence[sequence_index] = Message(type='note_on', channel=0, note=note, time=0)
+                except Exception as e:
+                    print(f"Invalid note: {note}\n {e}")
+                print("beat_count", beat_count, "sequence_index", sequence_index, "microsecond_delta",
+                      microsecond_delta)
+                display_sequence(sequence=sequence, beats_per_measure=beats_per_measure,
+                                 number_bars_in_sequence=number_bars_in_sequence,
+                                 sequences_per_beat=sequences_per_beat)
         sprites.draw(screen)
         sprites.update()
         pygame.display.flip()
         clock.tick()
-
 
 if __name__ == "__main__":
     main()
