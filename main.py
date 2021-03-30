@@ -73,7 +73,7 @@ def display_sequence(sequence: List[Optional[Message]], beats_per_measure, numbe
     for index, item in enumerate(sequence, start=1):
         string += f"{item.note if item else '_' :<4}"
 
-        if index % beats_per_measure == 0:
+        if index % (sequences_per_beat * beats_per_measure) == 0:
             string += "\n"
 
     print(string)
@@ -86,11 +86,11 @@ def main():
 
     beats_per_measure = 4
     number_bars_in_sequence = 1
-    sequences_per_beat = 1
+    sequences_per_beat = 4
     BEATS_PER_MINUTE = 60
     MICROSECONDS_PER_MINUTE = 60000000
     SECONDS_PER_MINUTE = 60
-    MICROSECONDS_PER_SECOND = MICROSECONDS_PER_MINUTE * SECONDS_PER_MINUTE
+    MICROSECONDS_PER_SECOND = 1000000
     MICROSECONDS_PER_BEAT = MICROSECONDS_PER_MINUTE / BEATS_PER_MINUTE
     MICROSECONDS_PER_BAR = MICROSECONDS_PER_BEAT * beats_per_measure
     NANOSECONDS_PER_MICROSECOND = 1000
@@ -127,6 +127,8 @@ def main():
         microsecond_delta: int = math.floor(nanosecond_delta / NANOSECONDS_PER_MICROSECOND)
         beat_count: int = math.ceil(microsecond_delta / MICROSECONDS_PER_BEAT)
         sequence_index = beat_count % len(sequence)
+        sleep_seconds = MICROSECONDS_PER_BEAT / MICROSECONDS_PER_SECOND / sequences_per_beat
+        print(f"sleep {sleep_seconds}")
         while True:
             for i in range(0, len(sequence)):
                 note = sequence[i]
@@ -137,7 +139,7 @@ def main():
                     except Exception as e:
                         print("failure", note)
                         print(e)
-                sleep(1)
+                sleep(sleep_seconds)
             print("hey! count")
             display_sequence(sequence=sequence, beats_per_measure=beats_per_measure,
                              number_bars_in_sequence=number_bars_in_sequence,
@@ -160,6 +162,8 @@ def main():
                 sys.exit()
             if event.type == pygame.KEYDOWN:
                 note = parse_key(event)
+                if note:
+                    port_out.send(Message(type='note_on', channel=0, note=note, time=0))
                 try:
                     sequence[sequence_index] = Message(type='note_on', channel=0, note=note, time=0)
                 except Exception as e:
