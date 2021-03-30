@@ -11,7 +11,7 @@ import pygame
 
 from datetime import datetime
 
-from music import display_sequence, Track
+from music import display_sequence, Track, SCREEN_WIDTH, SCREEN_HEIGHT
 
 beats_per_measure = 4
 number_bars_in_sequence = 1
@@ -90,8 +90,6 @@ def main():
     # SCREEN_WIDTH = infoObject.current_w
     # SCREEN_HEIGHT = infoObject.current_h
 
-    SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 1000
-
     # sprite_list_name = [Shape() for _ in range(0, 1)]
     set_settings()
     clock = pygame.time.Clock()
@@ -129,10 +127,12 @@ def main():
 
                 logging.info(f"beat_count {beat_count} microsecond_delta {microsecond_delta}")
 
-        selected_track.sprites.draw(screen)
-        selected_track.sprites.update()
-        pygame.display.flip()
+        # selected_track.sprites.draw(screen)
+        # selected_track.sprites.update()
+        # pygame.display.flip()
+        selected_track.menu.mainloop(screen)
         clock.tick()
+
 
 
 if __name__ == "__main__":
