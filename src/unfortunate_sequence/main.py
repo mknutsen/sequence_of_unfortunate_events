@@ -6,12 +6,12 @@ from time import time_ns
 from typing import Optional
 
 import sys
-
+from random import randint
 import pygame
 
 from datetime import datetime
 
-from music import display_sequence, Track, SCREEN_WIDTH, SCREEN_HEIGHT
+from music import Button, display_sequence, Track, SCREEN_WIDTH, SCREEN_HEIGHT
 
 beats_per_measure = 4
 number_bars_in_sequence = 1
@@ -94,6 +94,7 @@ def main():
     set_settings()
     clock = pygame.time.Clock()
     screen = pygame.display.set_mode((1000, 1000))
+    screen.fill((randint(0, 256), randint(0, 256), randint(0, 256)))
     start_time_ns = time_ns()
     count = 0
 
@@ -113,13 +114,23 @@ def main():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            if event.type == pygame.KEYDOWN:
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                # Set the x, y postions of the mouse click
+                (x, y) = event.pos
+                for sprite in selected_track.sprites:
+                    if not isinstance(sprite, Button):
+                        logging.error(f"suspicious! {sprite.__dict__}")
+                        continue
+                    sprite.click(x=x, y=y)
+
+            # loop over, quite pygame
+            elif event.type == pygame.KEYDOWN:
                 note = parse_key(event)
                 if note:
                     port_out.send(Message(type='note_on', channel=0, note=note, time=0))
 
                     sequence_index = beat_count % len(selected_track.sequence)
-                    selected_track.sequence[sequence_index] = Message(type='note_on', channel=0, note=note, time=0)
+                    selected_track.fill_note(beat_count=sequence_index, note=note)
                     logging.error(
                         display_sequence(sequence=selected_track.sequence, beats_per_measure=beats_per_measure,
                                          number_bars_in_sequence=number_bars_in_sequence,
@@ -127,12 +138,12 @@ def main():
 
                 logging.info(f"beat_count {beat_count} microsecond_delta {microsecond_delta}")
 
-        # selected_track.sprites.draw(screen)
-        # selected_track.sprites.update()
-        # pygame.display.flip()
-        selected_track.menu.mainloop(screen)
+        # screen.fill((10,10,10))
+        selected_track.sprites.draw(screen)
+        selected_track.sprites.update()
+        pygame.display.flip()
+        # selected_track.menu.mainloop(screen)
         clock.tick()
-
 
 
 if __name__ == "__main__":
