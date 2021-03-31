@@ -63,7 +63,7 @@ class Track:
                  MICROSECONDS_PER_SECOND, NANOSECONDS_PER_MICROSECOND, port_out, channel):
         self.channel = channel
         self.mute = False
-        self.color = (randint(0, 256), randint(0, 256), randint(0, 256))
+        self.color = (randint(0, 255), randint(0, 255), randint(0, 255))
         self.last_note = 50
         self.sequence: List[Optional[Message]] = [None, ] * (
                 number_bars_in_sequence * beats_per_measure * sequences_per_beat)

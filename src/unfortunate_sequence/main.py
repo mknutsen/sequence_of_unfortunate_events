@@ -75,7 +75,7 @@ def parse_key(event) -> Optional[int]:
                        pygame.K_w: 49,
                        pygame.K_s: 50,
                        pygame.K_e: 51,
-                       pygame.K_d: 532,
+                       pygame.K_d: 53,
                        pygame.K_f: 53,
                        pygame.K_t: 54,
                        pygame.K_g: 55,
@@ -83,7 +83,12 @@ def parse_key(event) -> Optional[int]:
                        pygame.K_h: 57,
                        pygame.K_u: 58,
                        pygame.K_j: 59, }
-        return translation[event.key] + shift * 12
+        value = translation[event.key] + shift * 12
+        if value > 127:
+            value = 127
+        elif value < 0:
+            value = 0
+        return value
     except:
         return None
 
