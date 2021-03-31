@@ -6,7 +6,7 @@ from time import sleep, time_ns
 from typing import List, Optional
 
 from mido import Message
-from random import choice
+from random import choice, randint
 
 from pygame import Color, Surface
 from pygame.sprite import Group, Sprite
@@ -52,13 +52,19 @@ class Track:
         button_height = 50
         for index in range(0, floor(seq_len)):
             self.sprites.add(
-                Button(x=index  * button_width, y=100, width=button_width, height=button_height,
+                Button(x=index * button_width, y=100, width=button_width, height=button_height,
                        check_callback=_check,
                        click_callback=_click, index=index))
+
+    def toggle_mute(self):
+        self.mute = not self.mute
 
     def __init__(self, number_bars_in_sequence, beats_per_measure, sequences_per_beat, MICROSECONDS_PER_BEAT,
                  MICROSECONDS_PER_SECOND, NANOSECONDS_PER_MICROSECOND, port_out, channel):
         self.channel = channel
+        self.mute = False
+        self.color = (randint(0, 256), randint(0, 256), randint(0, 256))
+        self.last_note = 50
         self.sequence: List[Optional[Message]] = [None, ] * (
                 number_bars_in_sequence * beats_per_measure * sequences_per_beat)
         self.start_time_ns = time_ns()
@@ -71,7 +77,7 @@ class Track:
             if _check(sequence_number):
                 _clear(sequence_number)
             else:
-                self.fill_note(beat_count=sequence_number, note=50)
+                self.fill_note(beat_count=sequence_number, note=self.last_note)
 
         def _check(sequence_number) -> bool:
             return self.sequence[sequence_number] is not None
@@ -84,12 +90,12 @@ class Track:
             microsecond_delta: int = floor(nanosecond_delta / NANOSECONDS_PER_MICROSECOND)
             beat_count: int = ceil(microsecond_delta / MICROSECONDS_PER_BEAT)
             sleep_seconds = MICROSECONDS_PER_BEAT / MICROSECONDS_PER_SECOND / sequences_per_beat
-            logging.info(f"sleep {sleep_seconds}")
+            logging.debug(f"sleep {self.channel} {sleep_seconds}")
             while True:
                 for i in range(0, len(self.sequence)):
                     note = self.sequence[i]
                     logging.debug(f"note {i} {note}")
-                    if note:
+                    if note and not self.mute:
                         port_out.send(note)
                     sleep(sleep_seconds)
 
@@ -97,5 +103,6 @@ class Track:
         self.playing_thread.daemon = True
         self.playing_thread.start()
 
-    def fill_note(self, beat_count, note):
-        self.sequence[beat_count] = Message(type='note_on', channel=self.channel, note=note, time=0, velocity=127)
+    def fill_note(self, beat_count, note, velocity=127):
+        self.last_note = note
+        self.sequence[beat_count] = Message(type='note_on', channel=self.channel, note=note, time=0, velocity=velocity)
