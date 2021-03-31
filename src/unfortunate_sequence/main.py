@@ -25,6 +25,7 @@ MICROSECONDS_PER_BAR = MICROSECONDS_PER_BEAT * beats_per_measure
 NANOSECONDS_PER_MICROSECOND = 1000
 TIME_THRESHOLD = MICROSECONDS_PER_MINUTE / SECONDS_PER_MINUTE
 record = False
+port_out = open_output('mio')
 
 
 def get_time_microsecond():
@@ -40,22 +41,32 @@ shift = 0
 selected_track = None
 tracks = None
 velocity = 127
-movement = (0,0,0)
+movement = (0, 0, 0)
 
 
 def set_settings() -> None:
     pass
 
 
+def global_send(message: Message) -> None:
+    try:
+        port_out.send(message)
+    except Exception as e:
+        logging.error(message.__dict__)
+        logging.error(str(e))
+
+
 def parse_key(event) -> Optional[int]:
     global shift, selected_track, tracks, velocity, record, movement
     logging.info(event.__dict__)
     number = event.key - pygame.K_0
-    logging.error(f"new track! {number} {pygame.K_0}")
+    # logging.error(f"new track! {number} {pygame.K_0}")
     if 0 <= number <= 9:
         logging.error(f"new track! {number}")
         selected_track = tracks[number]
 
+    if event.key == pygame.K_n:
+        selected_track.create_sequence()
     if event.key == pygame.K_m:
         selected_track.toggle_mute()
     if event.key == pygame.K_r:
@@ -131,8 +142,8 @@ def main():
 
     tracks = [Track(number_bars_in_sequence=number_bars_in_sequence, beats_per_measure=beats_per_measure,
                     MICROSECONDS_PER_BEAT=MICROSECONDS_PER_BEAT, MICROSECONDS_PER_SECOND=MICROSECONDS_PER_SECOND,
-                    NANOSECONDS_PER_MICROSECOND=NANOSECONDS_PER_MICROSECOND,
-                    port_out=port_out, sequences_per_beat=sequences_per_beat, channel=i) for i in
+                    NANOSECONDS_PER_MICROSECOND=NANOSECONDS_PER_MICROSECOND, sequences_per_beat=sequences_per_beat,
+                    send_function=global_send, channel=i) for i in
               range(1, 11)]
     selected_track = tracks[0]
 
@@ -159,16 +170,12 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 note = parse_key(event)
                 if note:
-                    port_out.send(
+                    global_send(
                         Message(type='note_on', channel=selected_track.channel, note=note, time=0, velocity=velocity))
                     selected_track.last_note = note
                     if record:
-                        sequence_index = beat_count % len(selected_track.sequence)
+                        sequence_index = beat_count % selected_track.get_sequence_length()
                         selected_track.fill_note(beat_count=sequence_index, note=note, velocity=velocity)
-                        logging.error(
-                            display_sequence(sequence=selected_track.sequence, beats_per_measure=beats_per_measure,
-                                             number_bars_in_sequence=number_bars_in_sequence,
-                                             sequences_per_beat=sequences_per_beat))
 
                 logging.info(f"beat_count {beat_count} microsecond_delta {microsecond_delta}")
 
