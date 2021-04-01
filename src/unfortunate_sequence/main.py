@@ -71,10 +71,10 @@ def parse_key(event) -> Optional[int]:
         selected_track.toggle_mute()
     if event.key == pygame.K_r:
         record = not record
-    if event.key == pygame.K_n:
-        velocity += 15
-    if event.key == pygame.K_b:
-        velocity -= 15
+    # if event.key == pygame.K_n:
+    #     velocity += 15
+    # if event.key == pygame.K_b:
+    #     velocity -= 15
 
     if event.key == pygame.K_z:
         shift += -1
@@ -170,13 +170,18 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 note = parse_key(event)
                 if note:
-                    global_send(
-                        Message(type='note_on', channel=selected_track.channel, note=note, time=0, velocity=velocity))
-                    selected_track.last_note = note
-                    if record:
-                        sequence_index = beat_count % selected_track.get_sequence_length()
-                        selected_track.fill_note(beat_count=sequence_index, note=note, velocity=velocity)
+                    try:
+                        global_send(
+                            Message(type='note_on', channel=selected_track.channel, note=note, time=0, velocity=velocity))
 
+                        selected_track.last_note = note
+                        if record:
+                            sequence_index = beat_count % selected_track.get_sequence_length()
+                            selected_track.fill_note(beat_count=sequence_index, note=note, velocity=velocity)
+
+                    except Exception as e:
+                        logging.error(f"type='note_on', channel={selected_track.channel}, note={note}, time=0, velocity={velocity}")
+                        logging.error(str(e))
                 logging.info(f"beat_count {beat_count} microsecond_delta {microsecond_delta}")
 
         screen.fill(selected_track.color)

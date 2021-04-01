@@ -11,7 +11,6 @@ from random import choice, randint
 from pygame import Color, Surface
 from pygame.sprite import Group, Sprite
 
-
 SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 1000
 
 
@@ -50,14 +49,17 @@ class Track:
 
     def create_sequence(self):
         note = self.last_note
+        if note in self.sequences:
+            return
         sequence = self.make_sequence()
         self.sequences[note] = sequence
+        num_sequences = len(self.sequences)
         seq_len = len(sequence)
-        button_width = SCREEN_WIDTH / seq_len
+        button_width = SCREEN_WIDTH / seq_len / 2
         button_height = 50
         for index in range(0, floor(seq_len)):
             self.sprites.add(
-                Button(x=index * button_width, y=100, width=button_width, height=button_height,
+                Button(x=index * button_width * 2, y=2 * button_height * num_sequences, width=button_width, height=button_height,
                        check_callback=self._check, note=note,
                        click_callback=self._click, index=index))
 
@@ -79,17 +81,20 @@ class Track:
 
         def _clear(sequence_number, note):
             self.sequences[note][sequence_number] = None
+
         def _click(sequence_number, note):
             if _check(sequence_number, note):
                 _clear(sequence_number, note)
             else:
                 self.fill_note(beat_count=sequence_number, note=note)
+
         def _check(sequence_number, note) -> bool:
             return self.sequences[note][sequence_number] is not None
 
         self._click = _click
         self._clear = _clear
         self._check = _check
+
         # self.create_sequence()
         def _target():
             current_time_ns = time_ns()
@@ -113,8 +118,9 @@ class Track:
 
     def fill_note(self, beat_count, note, velocity=127):
         if note not in self.sequences:
+            logging.error(f"making {note} {self.channel}")
             self.last_note = note
-            self.sequences[note] = self.make_sequence()
+            self.create_sequence()
         self.sequences[note][beat_count] = Message(type='note_on', channel=self.channel, note=note, time=0,
                                                    velocity=velocity)
 
@@ -124,5 +130,5 @@ class Track:
         return sequence
 
     def get_sequence_length(self):
-        return self.number_bars_in_sequence * self.beats_per_measure * self.\
+        return self.number_bars_in_sequence * self.beats_per_measure * self. \
             sequences_per_beat
