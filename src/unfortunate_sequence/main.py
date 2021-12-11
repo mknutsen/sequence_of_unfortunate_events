@@ -11,12 +11,12 @@ import pygame
 
 from datetime import datetime
 
-from music import Button, display_sequence, Track, SCREEN_WIDTH, SCREEN_HEIGHT
+from music import Button, display_sequence, MidiChannel, SCREEN_WIDTH, SCREEN_HEIGHT
 
 beats_per_measure = 4
-number_bars_in_sequence = 1
+number_bars_in_sequence = 4
 sequences_per_beat = 4
-BEATS_PER_MINUTE = 60
+BEATS_PER_MINUTE = 110
 MICROSECONDS_PER_MINUTE = 60000000
 SECONDS_PER_MINUTE = 60
 MICROSECONDS_PER_SECOND = 1000000
@@ -26,6 +26,14 @@ NANOSECONDS_PER_MICROSECOND = 1000
 TIME_THRESHOLD = MICROSECONDS_PER_MINUTE / SECONDS_PER_MINUTE
 record = False
 port_out = open_output('mio')
+
+
+def update_tempo(tempo):
+    global BEATS_PER_MINUTE, MICROSECONDS_PER_BEAT, tracks
+    BEATS_PER_MINUTE = tempo
+    MICROSECONDS_PER_BEAT = MICROSECONDS_PER_MINUTE / BEATS_PER_MINUTE
+    for track in tracks:
+        track.set_bpm(beats_per_minute=BEATS_PER_MINUTE, sequences_per_beat=sequences_per_beat)
 
 
 def get_time_microsecond():
@@ -40,7 +48,7 @@ _VERTICAL_OFFSET = 0
 shift = 0
 selected_track = None
 tracks = None
-velocity = 127
+tempo = 127
 movement = (0, 0, 0)
 
 
@@ -57,7 +65,7 @@ def global_send(message: Message) -> None:
 
 
 def parse_key(event) -> Optional[int]:
-    global shift, selected_track, tracks, velocity, record, movement
+    global shift, selected_track, tracks, tempo, record, movement
     logging.info(event.__dict__)
     number = event.key - pygame.K_0
     # logging.error(f"new track! {number} {pygame.K_0}")
@@ -65,16 +73,28 @@ def parse_key(event) -> Optional[int]:
         logging.error(f"new track! {number}")
         selected_track = tracks[number]
 
+    if event.key == pygame.K_COMMA:
+        selected_track.modify_sequence_length(1 / 2)
+    if event.key == pygame.K_PERIOD:
+        selected_track.modify_sequence_length(2)
+
+    if event.key == pygame.K_SEMICOLON:
+        selected_track.modify_beats_per_sequence(1 / 2)
+    if event.key == pygame.K_QUOTE:
+        selected_track.modify_beats_per_sequence(2)
+
     if event.key == pygame.K_n:
         selected_track.create_sequence()
     if event.key == pygame.K_m:
         selected_track.toggle_mute()
     if event.key == pygame.K_r:
         record = not record
-    # if event.key == pygame.K_n:
-    #     velocity += 15
-    # if event.key == pygame.K_b:
-    #     velocity -= 15
+    if event.key == pygame.K_b:
+        tempo += 5
+        update_tempo(tempo)
+    if event.key == pygame.K_v:
+        tempo -= 5
+        update_tempo(tempo)
 
     if event.key == pygame.K_z:
         shift += -1
@@ -118,7 +138,7 @@ def message_display(text, screen, x, y):
 
 
 def main():
-    global selected_track, tracks, velocity, record
+    global selected_track, tracks, tempo, record
     logging.basicConfig(format='%(message)s', level=logging.INFO)
 
     # port_in = open_input('USB MIDI Device')
@@ -140,11 +160,11 @@ def main():
     start_time_ns = time_ns()
     count = 0
 
-    tracks = [Track(number_bars_in_sequence=number_bars_in_sequence, beats_per_measure=beats_per_measure,
-                    MICROSECONDS_PER_BEAT=MICROSECONDS_PER_BEAT, MICROSECONDS_PER_SECOND=MICROSECONDS_PER_SECOND,
-                    NANOSECONDS_PER_MICROSECOND=NANOSECONDS_PER_MICROSECOND, sequences_per_beat=sequences_per_beat,
+    tracks = [
+        MidiChannel(bpm=BEATS_PER_MINUTE, sequences_per_beat=sequences_per_beat, beats_per_measure=beats_per_measure,
+                    sequence_length=(beats_per_measure * number_bars_in_sequence * sequences_per_beat),
                     send_function=global_send, channel=i) for i in
-              range(1, 11)]
+        range(1, 11)]
     selected_track = tracks[0]
 
     while True:
@@ -160,7 +180,7 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # Set the x, y postions of the mouse click
                 (x, y) = event.pos
-                for sprite in selected_track.sprites:
+                for sprite in selected_track.get_sprites():
                     if not isinstance(sprite, Button):
                         logging.error(f"suspicious! {sprite.__dict__}")
                         continue
@@ -172,26 +192,27 @@ def main():
                 if note:
                     try:
                         global_send(
-                            Message(type='note_on', channel=selected_track.channel, note=note, time=0, velocity=velocity))
+                            Message(type='note_on', channel=selected_track.channel, note=note, time=0, velocity=tempo))
 
                         selected_track.last_note = note
                         if record:
                             sequence_index = beat_count % selected_track.get_sequence_length()
-                            selected_track.fill_note(beat_count=sequence_index, note=note, velocity=velocity)
+                            selected_track.fill_note(beat_count=sequence_index, note=note, velocity=127)
 
                     except Exception as e:
-                        logging.error(f"type='note_on', channel={selected_track.channel}, note={note}, time=0, velocity={velocity}")
+                        logging.error(
+                            f"type='note_on', channel={selected_track.channel}, note={note}, time=0, velocity={127}")
                         logging.error(str(e))
                 logging.info(f"beat_count {beat_count} microsecond_delta {microsecond_delta}")
 
         screen.fill(selected_track.color)
-        selected_track.sprites.draw(screen)
-        selected_track.sprites.update()
+        selected_track.get_sprites().draw(screen)
+        selected_track.get_sprites().update()
         message_display(f"{selected_track.last_note} play ne", screen, 0, SCREEN_HEIGHT - 20)
         message_display("ROLLING" if record else "chill", screen, 0, SCREEN_HEIGHT - 40)
         message_display(f"Track {selected_track.channel}", screen, 0, SCREEN_HEIGHT - 60)
         message_display(f"Shift {shift}", screen, 0, SCREEN_HEIGHT - 80)
-        message_display(f"Velocity {velocity}", screen, 0, SCREEN_HEIGHT - 100)
+        message_display(f"Tempo {tempo}", screen, 0, SCREEN_HEIGHT - 100)
         if selected_track.mute:
             message_display(f"MUTED haha epic", screen, 0, SCREEN_HEIGHT - 200)
         pygame.display.flip()
